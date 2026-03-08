@@ -1,0 +1,2 @@
+staticmap
+fpdf2

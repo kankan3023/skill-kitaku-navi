@@ -1,0 +1,20 @@
+{
+  "name": "kitaku-route-marketplace",
+  "owner": {
+    "name": "kaede"
+  },
+  "metadata": {
+    "description": "災害時徒歩帰宅ルートを生成し、PDF出力するClaude Codeスキル。東京都内対応。",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "kitaku-route",
+      "source": "./plugins/kitaku-route",
+      "description": "災害時の徒歩帰宅ルートを自律的に生成。ルート沿いの避難所・給水拠点・AED等の防災情報を自動収集し、紙で持てるPDFマニュアルを出力します。",
+      "version": "0.1.0",
+      "category": "productivity",
+      "tags": ["disaster", "route", "pdf", "tokyo", "safety"]
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "name": "kitaku-route",
+  "description": "災害時の徒歩帰宅ルートを自律的に生成し、避難所・給水拠点・AED等の防災情報付きPDFマニュアルを出力するスキル。APIキー不要、東京都内対応。",
+  "version": "0.1.0",
+  "author": {
+    "name": "kaede"
+  },
+  "license": "MIT",
+  "keywords": ["disaster", "evacuation", "route", "pdf", "tokyo", "walking", "safety"]
+}

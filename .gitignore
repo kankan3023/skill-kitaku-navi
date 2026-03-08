@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+*.pyc
+*.Zone.Identifier
+/tmp/
+*.pdf
