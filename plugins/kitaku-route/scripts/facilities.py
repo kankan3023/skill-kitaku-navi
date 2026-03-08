@@ -146,7 +146,7 @@ def main():
         lng, lat = point[0], point[1]
         print(f"  検索中: {i+1}/{len(sampled)} ({lat:.4f}, {lng:.4f})", file=sys.stderr)
         if i > 0:
-            time.sleep(2)  # Overpass APIレート制限対策
+            time.sleep(3)  # Overpass APIレート制限対策
         try:
             elements = query_overpass(lat, lng, radius=500)
             all_elements.extend(elements)

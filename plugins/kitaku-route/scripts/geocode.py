@@ -75,12 +75,62 @@ def geocode_nominatim(query: str) -> dict | None:
     }
 
 
+def geocode_nominatim_station(query: str) -> dict | None:
+    """Nominatimで駅を明示的に検索する（railway=stationで絞り込み）"""
+    # 「駅」を除去して駅名だけ取り出す
+    station_name = query.replace("JR", "").replace("駅", "").strip()
+    params = urllib.parse.urlencode({
+        "q": f"{station_name} station",
+        "format": "json",
+        "limit": 10,
+        "countrycodes": "jp",
+        "accept-language": "ja",
+    })
+    url = f"https://nominatim.openstreetmap.org/search?{params}"
+
+    req = urllib.request.Request(url, headers={"User-Agent": "kitaku-route-skill/0.1"})
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+
+    if not data:
+        return None
+
+    # railway/station タイプを優先
+    for result in data:
+        if result.get("type") == "station" or "railway" in result.get("class", ""):
+            # 東京都を優先
+            if "東京" in result.get("display_name", ""):
+                return {
+                    "lat": float(result["lat"]),
+                    "lng": float(result["lon"]),
+                    "label": result["display_name"].split(",")[0],
+                }
+
+    # railway/stationで東京が見つからなければ、stationタイプの最初の結果
+    for result in data:
+        if result.get("type") == "station" or "railway" in result.get("class", ""):
+            return {
+                "lat": float(result["lat"]),
+                "lng": float(result["lon"]),
+                "label": result["display_name"].split(",")[0],
+            }
+
+    return None
+
+
 def geocode(query: str) -> dict | None:
-    """住所・駅名・ランドマーク名から座標を取得する（2段階フォールバック）"""
-    # 駅名・ランドマーク系のクエリはNominatimを優先
+    """住所・駅名・ランドマーク名から座標を取得する（多段フォールバック）"""
     landmark_keywords = ["駅", "空港", "公園", "タワー", "ビル", "大学", "学校", "神社", "寺"]
     is_landmark = any(kw in query for kw in landmark_keywords)
+    is_station = "駅" in query
 
+    # 駅名の場合は専用検索を最優先
+    if is_station:
+        result = geocode_nominatim_station(query)
+        if result:
+            return result
+
+    # ランドマーク系はNominatimを優先
     if is_landmark:
         result = geocode_nominatim(query)
         if result:
