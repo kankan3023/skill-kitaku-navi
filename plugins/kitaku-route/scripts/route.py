@@ -6,6 +6,46 @@ import sys
 import urllib.request
 
 
+MODIFIER_LABELS = {
+    "left": "左折",
+    "right": "右折",
+    "slight left": "やや左へ",
+    "slight right": "やや右へ",
+    "sharp left": "大きく左折",
+    "sharp right": "大きく右折",
+    "straight": "直進",
+    "uturn": "Uターン",
+}
+
+MANEUVER_LABELS = {
+    "turn": None,  # modifier で決まる
+    "new name": "道なりに進む",
+    "depart": "出発",
+    "continue": None,  # modifier で決まる
+    "merge": "道なりに合流",
+    "fork": None,  # modifier で決まる
+    "roundabout": "ロータリーを通過",
+    "end of road": None,  # modifier で決まる
+}
+
+
+def _build_instruction(maneuver: dict, street: str) -> str:
+    """OSRM maneuver から日本語の案内文を生成する"""
+    m_type = maneuver.get("type", "")
+    modifier = maneuver.get("modifier", "")
+
+    label = MANEUVER_LABELS.get(m_type)
+    if label is None:
+        # modifier から動作を決定
+        action = MODIFIER_LABELS.get(modifier, "進む")
+    else:
+        action = label
+
+    if street:
+        return f"「{street}」を{action}"
+    return action
+
+
 def get_route(origin_lng: float, origin_lat: float, dest_lng: float, dest_lat: float) -> dict:
     """OSRMで徒歩ルートを取得する"""
     url = (
@@ -27,6 +67,33 @@ def get_route(origin_lng: float, origin_lat: float, dest_lng: float, dest_lat: f
     # 徒歩4km/hで再計算（OSRMの推定より保守的に）
     walking_hours = round(distance_km / 4, 1)
 
+    # ステップ情報を抽出
+    steps = []
+    cumulative_m = 0
+    for step in route["legs"][0]["steps"]:
+        maneuver = step.get("maneuver", {})
+        m_type = maneuver.get("type", "")
+        # arrive(到着)は最後に追加するので一旦スキップ
+        if m_type == "arrive":
+            continue
+        distance_m = round(step.get("distance", 0))
+        cumulative_m += distance_m
+        steps.append({
+            "instruction": _build_instruction(maneuver, step.get("name", "")),
+            "street": step.get("name", ""),
+            "distance_m": distance_m,
+            "cumulative_m": cumulative_m,
+            "location": maneuver.get("location"),
+        })
+    # 到着ステップ
+    steps.append({
+        "instruction": "目的地に到着",
+        "street": "",
+        "distance_m": 0,
+        "cumulative_m": cumulative_m,
+        "location": route["legs"][0]["steps"][-1]["maneuver"]["location"],
+    })
+
     geojson = {
         "type": "FeatureCollection",
         "features": [
@@ -37,6 +104,7 @@ def get_route(origin_lng: float, origin_lat: float, dest_lng: float, dest_lat: f
                     "distance_km": distance_km,
                     "duration_min": duration_min,
                     "walking_hours": walking_hours,
+                    "steps": steps,
                 },
             }
         ],

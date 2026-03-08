@@ -68,6 +68,7 @@ def generate_pdf(route_path: str, facilities_path: str, map_dir: str,
     props = route_data["features"][0]["properties"]
     distance_km = props["distance_km"]
     walking_hours = props["walking_hours"]
+    steps = props.get("steps", [])
 
     facilities = None
     if facilities_path and os.path.exists(facilities_path):
@@ -162,15 +163,49 @@ def generate_pdf(route_path: str, facilities_path: str, map_dir: str,
     for symbol, desc in LEGEND_ITEMS:
         pdf.cell(0, 6, f"  {symbol}  {desc}", new_x="LMARGIN", new_y="NEXT")
 
-    # === 区間地図ページ ===
+    # ステップを区間ごとに分割（区間km単位で割り当て）
+    segment_km = 2.0
+    num_segments = max(1, len(map_images)) if map_images else 1
+    steps_by_segment = [[] for _ in range(num_segments)]
+    for step in steps:
+        cum_km = step["cumulative_m"] / 1000
+        seg_idx = min(int(cum_km / segment_km), num_segments - 1)
+        steps_by_segment[seg_idx].append(step)
+
+    # === 区間地図 + ナビゲーションページ ===
     if map_images:
         for i, img_path in enumerate(map_images):
             pdf.add_page()
             pdf.set_font(font, "", 16)
             pdf.set_text_color(0, 0, 0)
-            pdf.cell(0, 10, f"区間 {i + 1} / {len(map_images)}", new_x="LMARGIN", new_y="NEXT")
+            seg_start_km = round(i * segment_km, 1)
+            seg_end_km = round(min((i + 1) * segment_km, distance_km), 1)
+            pdf.cell(0, 10,
+                     f"区間 {i + 1} / {len(map_images)}（{seg_start_km}km - {seg_end_km}km）",
+                     new_x="LMARGIN", new_y="NEXT")
             pdf.ln(2)
             pdf.image(img_path, x=10, w=190)
+
+            # この区間のターンバイターン案内
+            seg_steps = steps_by_segment[i]
+            if seg_steps:
+                pdf.ln(5)
+                pdf.set_font(font, "", 12)
+                pdf.cell(0, 8, "ナビゲーション", new_x="LMARGIN", new_y="NEXT")
+                pdf.ln(2)
+                pdf.set_font(font, "", 10)
+                for s in seg_steps:
+                    cum_km = round(s["cumulative_m"] / 1000, 1)
+                    dist_m = s["distance_m"]
+                    inst = s["instruction"]
+                    if dist_m > 0:
+                        pdf.cell(0, 6,
+                                 f"  {cum_km}km | {inst}（{dist_m}m）",
+                                 new_x="LMARGIN", new_y="NEXT")
+                    else:
+                        pdf.cell(0, 6,
+                                 f"  {cum_km}km | {inst}",
+                                 new_x="LMARGIN", new_y="NEXT")
     else:
         pdf.add_page()
         pdf.set_font(font, "", 12)
