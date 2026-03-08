@@ -118,8 +118,70 @@ def geocode_nominatim_station(query: str) -> dict | None:
     return None
 
 
+import re
+
+
+def _is_postalcode(query: str) -> str | None:
+    """郵便番号パターンを検出してハイフンなし7桁で返す"""
+    # 〒163-0001, 163-0001, 1630001 等に対応
+    cleaned = query.replace("〒", "").replace(" ", "").replace("　", "").strip()
+    m = re.match(r"^(\d{3})-?(\d{4})$", cleaned)
+    if m:
+        return m.group(1) + m.group(2)
+    return None
+
+
+def geocode_postalcode(zipcode: str) -> dict | None:
+    """郵便番号→座標変換（Nominatim優先、zipcloud+GSIフォールバック）"""
+    # Nominatim で郵便番号検索
+    params = urllib.parse.urlencode({
+        "postalcode": zipcode,
+        "country": "jp",
+        "format": "json",
+        "limit": 1,
+        "accept-language": "ja",
+    })
+    url = f"https://nominatim.openstreetmap.org/search?{params}"
+
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "kitaku-route-skill/0.1"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+
+        if data:
+            r = data[0]
+            label = f"〒{zipcode[:3]}-{zipcode[3:]}付近"
+            return {"lat": float(r["lat"]), "lng": float(r["lon"]), "label": label}
+    except Exception:
+        pass
+
+    # フォールバック: zipcloud（郵便番号→住所）→ 国土地理院（住所→座標）
+    try:
+        url = f"https://zipcloud.ibsnet.co.jp/api/search?zipcode={zipcode}"
+        with urllib.request.urlopen(url, timeout=10) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+
+        results = data.get("results")
+        if results:
+            r = results[0]
+            address = f"{r['address1']}{r['address2']}{r['address3']}"
+            gsi_result = geocode_gsi(address)
+            if gsi_result:
+                gsi_result["label"] = f"〒{zipcode[:3]}-{zipcode[3:]}付近"
+                return gsi_result
+    except Exception:
+        pass
+
+    return None
+
+
 def geocode(query: str) -> dict | None:
-    """住所・駅名・ランドマーク名から座標を取得する（多段フォールバック）"""
+    """住所・駅名・ランドマーク名・郵便番号から座標を取得する（多段フォールバック）"""
+    # 郵便番号の場合は専用処理
+    zipcode = _is_postalcode(query)
+    if zipcode:
+        return geocode_postalcode(zipcode)
+
     landmark_keywords = ["駅", "空港", "公園", "タワー", "ビル", "大学", "学校", "神社", "寺"]
     is_landmark = any(kw in query for kw in landmark_keywords)
     is_station = "駅" in query
